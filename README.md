@@ -33,147 +33,173 @@ import ns.internet
 import ns.network
 import ns.point_to_point
 import ns.visualizer
+import ns.flow_monitor
+import ns.traffic_control
 
-# Create nodes
-nodes = ns.network.NodeContainer()
-nodes.Create(4)  # Create 4 nodes: n0, n1, n2, n3
+def main():
+    # Create nodes
+    nodes = ns.network.NodeContainer()
+    nodes.Create(4)  # Create 4 nodes: n0, n1, n2, n3
 
-# Install Internet Stack on all nodes
-stack = ns.internet.InternetStackHelper()
-stack.Install(nodes)
+    # Install Internet Stack on all nodes
+    stack = ns.internet.InternetStackHelper()
+    stack.Install(nodes)
 
-# Point-to-point link between n0 and n2 (2 Mbps, 10 ms delay)
-p2p_n0_n2 = ns.point_to_point.PointToPointHelper()
-p2p_n0_n2.SetDeviceAttribute("DataRate", ns.core.StringValue("2Mbps"))
-p2p_n0_n2.SetChannelAttribute("Delay", ns.core.StringValue("10ms"))
-devices_n0_n2 = p2p_n0_n2.Install(nodes.Get(0), nodes.Get(2))
+    # Point-to-point link between n0 and n2 (2 Mbps, 10 ms delay)
+    p2p_n0_n2 = ns.point_to_point.PointToPointHelper()
+    p2p_n0_n2.SetDeviceAttribute("DataRate", ns.core.StringValue("2Mbps"))
+    p2p_n0_n2.SetChannelAttribute("Delay", ns.core.StringValue("10ms"))
+    devices_n0_n2 = p2p_n0_n2.Install(nodes.Get(0), nodes.Get(2))
 
-# Point-to-point link between n1 and n2 (2 Mbps, 10 ms delay)
-p2p_n1_n2 = ns.point_to_point.PointToPointHelper()
-p2p_n1_n2.SetDeviceAttribute("DataRate", ns.core.StringValue("2Mbps"))
-p2p_n1_n2.SetChannelAttribute("Delay", ns.core.StringValue("10ms"))
-devices_n1_n2 = p2p_n1_n2.Install(nodes.Get(1), nodes.Get(2))
+    # Point-to-point link between n1 and n2 (2 Mbps, 10 ms delay)
+    p2p_n1_n2 = ns.point_to_point.PointToPointHelper()
+    p2p_n1_n2.SetDeviceAttribute("DataRate", ns.core.StringValue("2Mbps"))
+    p2p_n1_n2.SetChannelAttribute("Delay", ns.core.StringValue("10ms"))
+    devices_n1_n2 = p2p_n1_n2.Install(nodes.Get(1), nodes.Get(2))
 
-# Point-to-point link between n2 and n3 (1.7 Mbps, 20 ms delay)
-p2p_n2_n3 = ns.point_to_point.PointToPointHelper()
-p2p_n2_n3.SetDeviceAttribute("DataRate", ns.core.StringValue("1.7Mbps"))
-p2p_n2_n3.SetChannelAttribute("Delay", ns.core.StringValue("20ms"))
-devices_n2_n3 = p2p_n2_n3.Install(nodes.Get(2), nodes.Get(3))
+    # Point-to-point link between n2 and n3 (1.7 Mbps, 20 ms delay)
+    p2p_n2_n3 = ns.point_to_point.PointToPointHelper()
+    p2p_n2_n3.SetDeviceAttribute("DataRate", ns.core.StringValue("1.7Mbps"))
+    p2p_n2_n3.SetChannelAttribute("Delay", ns.core.StringValue("20ms"))
+    devices_n2_n3 = p2p_n2_n3.Install(nodes.Get(2), nodes.Get(3))
 
-# Assign IP addresses
-address = ns.internet.Ipv4AddressHelper()
+    # Assign IP addresses
+    address = ns.internet.Ipv4AddressHelper()
 
-# IP for n0-n2 link
-address.SetBase(ns.network.Ipv4Address("10.1.1.0"), ns.network.Ipv4Mask("255.255.255.0"))
-interfaces_n0_n2 = address.Assign(devices_n0_n2)
+    # IP for n0-n2 link
+    address.SetBase(ns.network.Ipv4Address("10.1.1.0"), ns.network.Ipv4Mask("255.255.255.0"))
+    interfaces_n0_n2 = address.Assign(devices_n0_n2)
 
-# IP for n1-n2 link
-address.SetBase(ns.network.Ipv4Address("10.1.2.0"), ns.network.Ipv4Mask("255.255.255.0"))
-interfaces_n1_n2 = address.Assign(devices_n1_n2)
+    # IP for n1-n2 link
+    address.SetBase(ns.network.Ipv4Address("10.1.2.0"), ns.network.Ipv4Mask("255.255.255.0"))
+    interfaces_n1_n2 = address.Assign(devices_n1_n2)
 
-# IP for n2-n3 link
-address.SetBase(ns.network.Ipv4Address("10.1.3.0"), ns.network.Ipv4Mask("255.255.255.0"))
-interfaces_n2_n3 = address.Assign(devices_n2_n3)
+    # IP for n2-n3 link
+    address.SetBase(ns.network.Ipv4Address("10.1.3.0"), ns.network.Ipv4Mask("255.255.255.0"))
+    interfaces_n2_n3 = address.Assign(devices_n2_n3)
 
-# Enable routing
-ns.internet.Ipv4GlobalRoutingHelper.PopulateRoutingTables()
+    # Enable routing
+    ns.internet.Ipv4GlobalRoutingHelper.PopulateRoutingTables()
 
-# Add TCP agent on n1 and sink on n3
-tcp_source = ns.applications.BulkSendHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 9))
-tcp_source.SetAttribute("MaxBytes", ns.core.UintegerValue(0))  # Unlimited data
-tcp_app = tcp_source.Install(nodes.Get(1))
-tcp_app.Start(ns.core.Seconds(0.5))  # Start at 0.5 seconds
-tcp_app.Stop(ns.core.Seconds(4.0))  # Stop at 4.0 seconds
+    # Configure DropTail queue with max size 10 packets
+    traffic_control = ns.traffic_control.TrafficControlHelper()
+    traffic_control.SetQueue("ns3::DropTailQueue", "MaxPackets", ns.core.UintegerValue(10))
+    traffic_control.Install(devices_n0_n2)
+    traffic_control.Install(devices_n1_n2)
+    traffic_control.Install(devices_n2_n3)
 
-tcp_sink = ns.applications.PacketSinkHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(ns.network.Ipv4Address.GetAny(), 9))
-tcp_sink_app = tcp_sink.Install(nodes.Get(3))
-tcp_sink_app.Start(ns.core.Seconds(0.0))  # Start at simulation time 0
-tcp_sink_app.Stop(ns.core.Seconds(10.0))
+    # Add TCP FTP application on n1 and sink on n3
+    tcp_sink = ns.applications.PacketSinkHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(ns.network.Ipv4Address.GetAny(), 9))
+    tcp_sink_app = tcp_sink.Install(nodes.Get(3))
+    tcp_sink_app.Start(ns.core.Seconds(0.0))
+    tcp_sink_app.Stop(ns.core.Seconds(10.0))
 
-# Add UDP agent on n0 and null agent on n3
-udp_source = ns.applications.OnOffHelper("ns3::UdpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 10))
-udp_source.SetAttribute("PacketSize", ns.core.UintegerValue(1024))  # 1 KB packets
-udp_source.SetAttribute("DataRate", ns.core.StringValue("100kbps"))  # Rate: 100 packets/sec
-udp_app = udp_source.Install(nodes.Get(0))
-udp_app.Start(ns.core.Seconds(0.1))  # Start at 0.1 seconds
-udp_app.Stop(ns.core.Seconds(4.5))  # Stop at 4.5 seconds
+    ftp = ns.applications.BulkSendHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 9))
+    ftp.SetAttribute("MaxBytes", ns.core.UintegerValue(0))  # Unlimited data
+    ftp_app = ftp.Install(nodes.Get(1))
+    ftp_app.Start(ns.core.Seconds(0.5))
+    ftp_app.Stop(ns.core.Seconds(4.0))
 
-udp_sink = ns.applications.PacketSinkHelper("ns3::UdpSocketFactory", ns.network.InetSocketAddress(ns.network.Ipv4Address.GetAny(), 10))
-udp_sink_app = udp_sink.Install(nodes.Get(3))
-udp_sink_app.Start(ns.core.Seconds(0.0))
-udp_sink_app.Stop(ns.core.Seconds(10.0))
+    # Add UDP CBR application on n0 and sink on n3
+    udp_sink = ns.applications.PacketSinkHelper("ns3::UdpSocketFactory", ns.network.InetSocketAddress(ns.network.Ipv4Address.GetAny(), 10))
+    udp_sink_app = udp_sink.Install(nodes.Get(3))
+    udp_sink_app.Start(ns.core.Seconds(0.0))
+    udp_sink_app.Stop(ns.core.Seconds(10.0))
 
-# Enable FlowMonitor to track and color traffic
-flowmon = ns.flow_monitor.FlowMonitorHelper()
-monitor = flowmon.InstallAll()
+    cbr = ns.applications.OnOffHelper("ns3::UdpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 10))
+    cbr.SetAttribute("PacketSize", ns.core.UintegerValue(1024))  # 1 KB packets
+    cbr.SetAttribute("DataRate", ns.core.StringValue("100kbps"))  # 100 packets/sec
+    cbr_app = cbr.Install(nodes.Get(0))
+    cbr_app.Start(ns.core.Seconds(0.1))
+    cbr_app.Stop(ns.core.Seconds(4.5))
 
-# Run simulation
-ns.core.Simulator.Stop(ns.core.Seconds(10.0))
+    # Enable FlowMonitor to track and color traffic
+    flowmon = ns.flow_monitor.FlowMonitorHelper()
+    monitor = flowmon.InstallAll()
 
-# Define Coloring Rules
-def ColorTraffic():
-    classifier = flowmon.GetClassifier()
-    for flow_id, flow_stats in monitor.GetFlowStats():
-        flow_desc = classifier.FindFlow(flow_id)
-        if flow_desc.protocol == 6:  # TCP (6 in IP header)
-            print(f"Flow {flow_id} (TCP): Color it BLUE")
-        elif flow_desc.protocol == 17:  # UDP (17 in IP header)
-            print(f"Flow {flow_id} (UDP): Color it RED")
+    # Define traffic coloring rules
+    def ColorTraffic():
+        classifier = flowmon.GetClassifier()
+        for flow_id, flow_stats in monitor.GetFlowStats():
+            flow_desc = classifier.FindFlow(flow_id)
+            if flow_desc.protocol == 6:  # TCP (6 in IP header)
+                print(f"Flow {flow_id} (TCP): Color it BLUE")
+            elif flow_desc.protocol == 17:  # UDP (17 in IP header)
+                print(f"Flow {flow_id} (UDP): Color it RED")
 
-# Enable PyViz and add Coloring Callback
-ns.visualizer.PyVizHelper.Enable()
-ColorTraffic()
+    # Enable PyViz visualization
+    ns.visualizer.PyVizHelper.Enable()
 
-# Run and destroy
-ns.core.Simulator.Run()
-ns.core.Simulator.Destroy()
+    # Run simulation
+    ns.core.Simulator.Stop(ns.core.Seconds(10.0))
+    ns.core.Simulator.Run()
+
+    # Color traffic based on protocol
+    ColorTraffic()
+
+    # Destroy simulation
+    ns.core.Simulator.Destroy()
+
+if __name__ == "__main__":
+    main()
+
 
 ```
 
   
 ----------
 
-### **Import Required Modules**
+
+# In-Depth Documentation of the Network Simulation Code
+
+This documentation explains the functionality and purpose of each line of the provided Python code for simulating a network using ns-3. It delves into all parameters passed to functions and the underlying logic.
+
+----------
+
+## Code Breakdown
+
+### 1. Importing Required Modules
 
 ```python
-import ns.applications
 import ns.core
-import ns.internet
 import ns.network
+import ns.internet
+import ns.applications
 import ns.point_to_point
+import ns.traffic_control
+import ns.flow_monitor
 import ns.visualizer
 
 ```
 
--   **Purpose**: These modules provide the building blocks to set up, configure, and simulate a network in NS-3.
-    -   `ns.applications`: Contains applications like TCP, UDP, FTP, and CBR that simulate traffic generation.
-    -   `ns.core`: Provides the core functionality like events, timers, and simulation controls.
-    -   `ns.internet`: Offers tools for IP-based networking (IPv4, routing, etc.).
-    -   `ns.network`: Manages network nodes, channels, and data links.
-    -   `ns.point_to_point`: Includes point-to-point link helpers for direct connections.
-    -   `ns.visualizer`: Enables PyViz for visualization of network simulations.
+-   **Purpose**: These imports bring in the necessary components of ns-3 into the Python script. Each module provides specific functionalities:
+    -   `ns.core`: Core functionality for scheduling events, setting up simulation time, and managing attributes.
+    -   `ns.network`: Provides classes for creating nodes and network devices.
+    -   `ns.internet`: Supplies IP stack and routing protocols.
+    -   `ns.applications`: Defines applications such as FTP and CBR.
+    -   `ns.point_to_point`: Manages point-to-point links between nodes.
+    -   `ns.traffic_control`: Allows configuration of queue management systems, such as DropTail.
+    -   `ns.flow_monitor`: Provides tools for monitoring traffic flows.
+    -   `ns.visualizer`: Enables visualization of the network.
 
 ----------
 
-### **Node Creation**
+### 2. Creating Nodes
 
 ```python
 nodes = ns.network.NodeContainer()
-nodes.Create(4)  # Create 4 nodes: n0, n1, n2, n3
+nodes.Create(4)
 
 ```
 
--   `ns.network.NodeContainer`: A container to manage a group of nodes.
--   `nodes.Create(4)`: Creates 4 nodes in the container, named `n0`, `n1`, `n2`, and `n3`.
-
-**Variations**:
-
--   `nodes.Add(node)`: Add an existing node to the container.
--   Use `NodeContainer()` to group specific nodes together if the network is complex.
+-   **Purpose**: This creates a container for the network nodes and initializes four nodes (`n0`, `n1`, `n2`, `n3`).
+-   **Explanation**:
+    -   `NodeContainer()`: A helper class that simplifies node creation and management.
+    -   `Create(4)`: Allocates four nodes within the container.
 
 ----------
 
-### **Installing Internet Stack**
+### 3. Installing the Internet Stack
 
 ```python
 stack = ns.internet.InternetStackHelper()
@@ -181,145 +207,121 @@ stack.Install(nodes)
 
 ```
 
--   `ns.internet.InternetStackHelper`: Helps to install networking protocols like IPv4, IPv6, and routing on the nodes.
--   `stack.Install(nodes)`: Installs the internet stack on all nodes.
-
-**Variations**:
-
--   Install on specific nodes: `stack.Install(nodes.Get(0))`.
+-   **Purpose**: Installs the TCP/IP stack on all nodes to enable communication using standard Internet protocols.
+-   **Explanation**:
+    -   `InternetStackHelper()`: A helper class for managing network stacks on nodes.
+    -   `Install(nodes)`: Installs the Internet stack on all nodes in the `NodeContainer`.
 
 ----------
 
-### **Point-to-Point Links**
+### 4. Configuring Point-to-Point Links
 
-Each duplex link is configured with specific bandwidth, delay, and queue size.
-
-#### **Link Between n0 and n2**
+#### Link Between `n0` and `n2`
 
 ```python
 p2p_n0_n2 = ns.point_to_point.PointToPointHelper()
 p2p_n0_n2.SetDeviceAttribute("DataRate", ns.core.StringValue("2Mbps"))
 p2p_n0_n2.SetChannelAttribute("Delay", ns.core.StringValue("10ms"))
-p2p_n0_n2.SetQueue("ns3::DropTailQueue", "MaxSize", ns.core.StringValue("10p"))
 devices_n0_n2 = p2p_n0_n2.Install(nodes.Get(0), nodes.Get(2))
 
 ```
 
--   `ns.point_to_point.PointToPointHelper`: A helper for creating point-to-point links.
--   `SetDeviceAttribute`: Sets attributes for devices on the link.
-    -   `"DataRate"`: Defines link bandwidth as 2 Mbps.
--   `SetChannelAttribute`: Sets attributes for the link channel.
-    -   `"Delay"`: Defines the propagation delay as 10 ms.
--   `SetQueue`: Specifies the queue type (`DropTailQueue`) and maximum queue size (10 packets, `"10p"`).
--   `Install(nodes.Get(0), nodes.Get(2))`: Creates a duplex link between `n0` and `n2`.
+-   **Purpose**: Sets up a point-to-point connection between nodes `n0` and `n2` with a bandwidth of 2 Mbps and delay of 10 ms.
+-   **Explanation**:
+    -   `PointToPointHelper()`: Configures point-to-point links.
+    -   `SetDeviceAttribute("DataRate", ...)`: Defines the bandwidth.
+        -   **Parameter**: `StringValue("2Mbps")` specifies a bandwidth of 2 Mbps.
+    -   `SetChannelAttribute("Delay", ...)`: Specifies the propagation delay.
+        -   **Parameter**: `StringValue("10ms")` specifies a delay of 10 ms.
+    -   `Install(nodes.Get(0), nodes.Get(2))`: Creates the link and attaches it to nodes `n0` and `n2`.
 
-**Variations**:
-
--   Use `SetQueue` to configure other queue types (e.g., `ns3::RedQueue`).
-
-----------
-
-#### **Links Between n1-n2 and n2-n3**
-
-Similar configurations are applied for other links with specific bandwidths and delays:
+#### Link Between `n1` and `n2`
 
 ```python
 p2p_n1_n2 = ns.point_to_point.PointToPointHelper()
 p2p_n1_n2.SetDeviceAttribute("DataRate", ns.core.StringValue("2Mbps"))
 p2p_n1_n2.SetChannelAttribute("Delay", ns.core.StringValue("10ms"))
-p2p_n1_n2.SetQueue("ns3::DropTailQueue", "MaxSize", ns.core.StringValue("10p"))
 devices_n1_n2 = p2p_n1_n2.Install(nodes.Get(1), nodes.Get(2))
 
+```
+
+-   **Purpose**: Sets up a point-to-point connection between nodes `n1` and `n2` with the same bandwidth and delay as above.
+
+#### Link Between `n2` and `n3`
+
+```python
 p2p_n2_n3 = ns.point_to_point.PointToPointHelper()
 p2p_n2_n3.SetDeviceAttribute("DataRate", ns.core.StringValue("1.7Mbps"))
 p2p_n2_n3.SetChannelAttribute("Delay", ns.core.StringValue("20ms"))
-p2p_n2_n3.SetQueue("ns3::DropTailQueue", "MaxSize", ns.core.StringValue("10p"))
 devices_n2_n3 = p2p_n2_n3.Install(nodes.Get(2), nodes.Get(3))
 
 ```
 
+-   **Purpose**: Sets up a point-to-point connection between nodes `n2` and `n3` with a bandwidth of 1.7 Mbps and delay of 20 ms.
+
 ----------
 
-### **Assigning IP Addresses**
+### 5. Assigning IP Addresses
 
 ```python
 address = ns.internet.Ipv4AddressHelper()
 
-# Assign IP to n0-n2 link
+```
+
+-   **Purpose**: This helper assigns IP addresses to the devices on each link.
+
+#### Assigning IP Addresses to Links
+
+```python
 address.SetBase(ns.network.Ipv4Address("10.1.1.0"), ns.network.Ipv4Mask("255.255.255.0"))
 interfaces_n0_n2 = address.Assign(devices_n0_n2)
 
-# Assign IP to n1-n2 link
+```
+
+-   **Purpose**: Assigns IP addresses to the `n0-n2` link.
+-   **Explanation**:
+    -   `SetBase(...)`: Specifies the subnet and subnet mask.
+        -   **Parameters**:
+            -   `Ipv4Address("10.1.1.0")`: Subnet.
+            -   `Ipv4Mask("255.255.255.0")`: Subnet mask.
+    -   `Assign(devices_n0_n2)`: Assigns IP addresses to devices in the link.
+
+```python
 address.SetBase(ns.network.Ipv4Address("10.1.2.0"), ns.network.Ipv4Mask("255.255.255.0"))
 interfaces_n1_n2 = address.Assign(devices_n1_n2)
 
-# Assign IP to n2-n3 link
+```
+
+-   **Purpose**: Assigns IP addresses to the `n1-n2` link.
+
+```python
 address.SetBase(ns.network.Ipv4Address("10.1.3.0"), ns.network.Ipv4Mask("255.255.255.0"))
 interfaces_n2_n3 = address.Assign(devices_n2_n3)
 
 ```
 
--   `Ipv4AddressHelper`: Automates IP assignment for links.
--   `SetBase`: Sets the base address and subnet mask for each link.
--   `Assign`: Allocates IPs to devices on the link.
-
-**Variations**:
-
--   Use `SetBase` with different subnets for larger networks.
+-   **Purpose**: Assigns IP addresses to the `n2-n3` link.
 
 ----------
 
-### **Routing Setup**
+### 6. Enabling Routing
 
 ```python
 ns.internet.Ipv4GlobalRoutingHelper.PopulateRoutingTables()
 
 ```
 
--   `Ipv4GlobalRoutingHelper.PopulateRoutingTables`: Automatically sets up routing tables for all nodes.
+-   **Purpose**: Populates the global routing tables to ensure all nodes can route packets to their destinations.
 
 ----------
 
-### **Application Setup**
-
-#### **TCP**
-
-```python
-tcp_source = ns.applications.BulkSendHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 9))
-tcp_source.SetAttribute("MaxBytes", ns.core.UintegerValue(0))
-tcp_app = tcp_source.Install(nodes.Get(1))
-tcp_app.Start(ns.core.Seconds(0.5))
-tcp_app.Stop(ns.core.Seconds(4.0))
-
-```
-
--   **`BulkSendHelper`**: Sends bulk data over a TCP connection.
-    -   `"MaxBytes"`: 0 for unlimited data.
-    -   Destination: `interfaces_n2_n3.GetAddress(1)` (IP of `n3`).
--   **Start/Stop**: Activates between 0.5 and 4.0 seconds.
-
-#### **UDP**
-
-```python
-udp_source = ns.applications.OnOffHelper("ns3::UdpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 10))
-udp_source.SetAttribute("PacketSize", ns.core.UintegerValue(1024))
-udp_source.SetAttribute("DataRate", ns.core.StringValue("100kbps"))
-udp_app = udp_source.Install(nodes.Get(0))
-udp_app.Start(ns.core.Seconds(0.1))
-udp_app.Stop(ns.core.Seconds(4.5))
-
-```
-
--   **`OnOffHelper`**: Generates traffic with bursts (on/off periods).
-    -   `"PacketSize"`: 1 KB packets.
-    -   `"DataRate"`: 100 packets/sec.
+### 7. Setting Up TCP Traffic
+### 8. Setting Up UDP Traffic
+explained below
 
 ----------
 
-
-### **Visualization**
-
-#### **1. Enable FlowMonitor**
+### 9. Setting Up Flow Monitor and Visualization
 
 ```python
 flowmon = ns.flow_monitor.FlowMonitorHelper()
@@ -327,27 +329,14 @@ monitor = flowmon.InstallAll()
 
 ```
 
--   **`ns.flow_monitor.FlowMonitorHelper()`**:
-    
-    -   A helper class in NS3 that simplifies the setup of the **FlowMonitor** system. The FlowMonitor collects traffic flow statistics during the simulation, such as packet counts, delays, and throughput.
--   **`monitor = flowmon.InstallAll()`**:
-    
-    -   This installs the **FlowMonitor** on all nodes in the simulation. It ensures that traffic on all links is tracked.
-
-----------
-
-#### **2. Run Simulation**
+-   **Purpose**: Enables traffic monitoring to analyze flows.
 
 ```python
-ns.core.Simulator.Stop(ns.core.Seconds(10.0))
+ns.visualizer.PyVizHelper.Enable()
 
 ```
 
--   The simulator is configured to run for 10 seconds, after which it automatically stops. This ensures that all traffic flows within this duration are captured.
-
-----------
-
-#### **3. Define Coloring Rules**
+-   **Purpose**: Activates PyViz for graphical visualization.
 
 ```python
 def ColorTraffic():
@@ -358,91 +347,30 @@ def ColorTraffic():
             print(f"Flow {flow_id} (TCP): Color it BLUE")
         elif flow_desc.protocol == 17:  # UDP (17 in IP header)
             print(f"Flow {flow_id} (UDP): Color it RED")
-
-```
-
--   **Purpose**:
-    
-    -   This function applies the traffic coloring rules based on the **protocol** used by each flow. Flows are identified using their `flow_id`, and the corresponding protocol is checked to determine its color.
--   **Step-by-Step Breakdown**:
-    
-    1.  **`classifier = flowmon.GetClassifier()`**:
-        
-        -   Retrieves the classifier object. It maps flow IDs to flow descriptors (source/destination IPs, ports, and protocol).
-    2.  **`monitor.GetFlowStats()`**:
-        
-        -   Obtains the statistics for each flow (e.g., bytes sent/received, delays).
-    3.  **`classifier.FindFlow(flow_id)`**:
-        
-        -   Retrieves the **flow descriptor** for the given `flow_id`. This descriptor contains key details about the flow:
-            -   `sourceAddress`: Source IP address.
-            -   `destinationAddress`: Destination IP address.
-            -   `protocol`: The protocol in use (6 for TCP, 17 for UDP).
-    4.  **Protocol Checks**:
-        
-        -   **`flow_desc.protocol == 6`**:
-            -   If the protocol is **6** (TCP, as per the IP header), the flow is colored **BLUE**.
-        -   **`flow_desc.protocol == 17`**:
-            -   If the protocol is **17** (UDP, as per the IP header), the flow is colored **RED**.
-    5.  **Output**:
-        
-        -   Prints the flow ID, protocol, and assigned color.
-
-----------
-
-#### **4. Enable PyViz and Add Coloring Callback**
-
-```python
-ns.visualizer.PyVizHelper.Enable()
 ColorTraffic()
 
 ```
 
--   **`ns.visualizer.PyVizHelper.Enable()`**:
-    
-    -   Enables **PyViz**, a visualization tool that provides a real-time view of the network simulation. It allows you to observe the simulation topology and packet flows interactively.
--   **`ColorTraffic()`**:
-    
-    -   This function is called to apply the coloring rules defined earlier. It processes the flows and prints their assigned colors based on their protocols.
+-   **Purpose**: Colors traffic based on protocol type.
+-   **Explanation**:
+    -   Protocol 6: TCP (blue).
+    -   Protocol 17: UDP (red).
 
 ----------
 
-### **Explanation of Flow Coloring**
-
--   **Why is Flow Coloring Important?**
-    
-    -   It helps differentiate traffic types visually, making it easier to analyze network performance for different protocols.
--   **Key Mechanisms**:
-    
-    -   **FlowMonitor**: Tracks and logs all flows during the simulation.
-    -   **Classifier**: Maps flow IDs to protocol and other metadata.
-    -   **Color Assignment**:
-        -   **TCP** → **Blue** (e.g., Bulk data transfer).
-        -   **UDP** → **Red** (e.g., Real-time video or VoIP).
-
-----------
-
-### **Improvements**
-
--   **Dynamic Visualization**:
-    -   The current code prints flow coloring information to the console. For dynamic visualization, you could integrate coloring directly into **PyViz** if supported.
--   **Real-Time Monitoring**:
-    -   Update flow statistics and apply coloring rules dynamically during the simulation, instead of after it ends.
-
-----------
-
-### **Run the Simulation**
+### 10. Running the Simulation
 
 ```python
-ns.core.Simulator.Stop(ns.core.Seconds(10.0))
 ns.core.Simulator.Run()
 ns.core.Simulator.Destroy()
 
 ```
 
--   `Stop`: Stops the simulation after 10 seconds.
--   `Run`: Executes the simulation.
--   `Destroy`: Cleans up resources.
+-   **Purpose**: Executes the simulation and cleans up resources afterward.
+
+----------
+
+This documentation ensures every line and parameter of the script is explained comprehensively. If further elaboration is needed, feel free to ask!
 
 ----------
 
@@ -450,161 +378,153 @@ ns.core.Simulator.Destroy()
 
 
 ```python
+    # Enable routing
+    ns.internet.Ipv4GlobalRoutingHelper.PopulateRoutingTables()
 
-# Enable routing
+    # Configure DropTail queue with max size 10 packets
+    traffic_control = ns.traffic_control.TrafficControlHelper()
+    traffic_control.SetQueue("ns3::DropTailQueue", "MaxPackets", ns.core.UintegerValue(10))
+    traffic_control.Install(devices_n0_n2)
+    traffic_control.Install(devices_n1_n2)
+    traffic_control.Install(devices_n2_n3)
+
+    # Add TCP FTP application on n1 and sink on n3
+    tcp_sink = ns.applications.PacketSinkHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(ns.network.Ipv4Address.GetAny(), 9))
+    tcp_sink_app = tcp_sink.Install(nodes.Get(3))
+    tcp_sink_app.Start(ns.core.Seconds(0.0))
+    tcp_sink_app.Stop(ns.core.Seconds(10.0))
+
+    ftp = ns.applications.BulkSendHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 9))
+    ftp.SetAttribute("MaxBytes", ns.core.UintegerValue(0))  # Unlimited data
+    ftp_app = ftp.Install(nodes.Get(1))
+    ftp_app.Start(ns.core.Seconds(0.5))
+    ftp_app.Stop(ns.core.Seconds(4.0))
+
+    # Add UDP CBR application on n0 and sink on n3
+    udp_sink = ns.applications.PacketSinkHelper("ns3::UdpSocketFactory", ns.network.InetSocketAddress(ns.network.Ipv4Address.GetAny(), 10))
+    udp_sink_app = udp_sink.Install(nodes.Get(3))
+    udp_sink_app.Start(ns.core.Seconds(0.0))
+    udp_sink_app.Stop(ns.core.Seconds(10.0))
+
+    cbr = ns.applications.OnOffHelper("ns3::UdpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 10))
+    cbr.SetAttribute("PacketSize", ns.core.UintegerValue(1024))  # 1 KB packets
+    cbr.SetAttribute("DataRate", ns.core.StringValue("100kbps"))  # 100 packets/sec
+    cbr_app = cbr.Install(nodes.Get(0))
+    cbr_app.Start(ns.core.Seconds(0.1))
+    cbr_app.Stop(ns.core.Seconds(4.5))
+
+    # Enable FlowMonitor to track and color traffic
+    flowmon = ns.flow_monitor.FlowMonitorHelper()
+    monitor = flowmon.InstallAll()
+
+    # Define traffic coloring rules
+    def ColorTraffic():
+        classifier = flowmon.GetClassifier()
+        for flow_id, flow_stats in monitor.GetFlowStats():
+            flow_desc = classifier.FindFlow(flow_id)
+            if flow_desc.protocol == 6:  # TCP (6 in IP header)
+                print(f"Flow {flow_id} (TCP): Color it BLUE")
+            elif flow_desc.protocol == 17:  # UDP (17 in IP header)
+                print(f"Flow {flow_id} (UDP): Color it RED")
+
+    # Enable PyViz visualization
+    ns.visualizer.PyVizHelper.Enable()
+    
+
+```
+# Comprehensive Documentation for the Network Simulation Code
+
+This documentation provides an **in-depth explanation** of the code. Each line is broken down to explain its purpose, the parameters passed, and its contribution to the overall simulation.
+
+----------
+
+## **Code Documentation**
+
+### **Routing Configuration**
+
+```python
 ns.internet.Ipv4GlobalRoutingHelper.PopulateRoutingTables()
 
-# Add TCP agent on n1 and sink on n3
-tcp_source = ns.applications.BulkSendHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 9))
-tcp_source.SetAttribute("MaxBytes", ns.core.UintegerValue(0))  # Unlimited data
-tcp_app = tcp_source.Install(nodes.Get(1))
-tcp_app.Start(ns.core.Seconds(0.5))  # Start at 0.5 seconds
-tcp_app.Stop(ns.core.Seconds(4.0))  # Stop at 4.0 seconds
-
-tcp_sink = ns.applications.PacketSinkHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(ns.network.Ipv4Address.GetAny(), 9))
-tcp_sink_app = tcp_sink.Install(nodes.Get(3))
-tcp_sink_app.Start(ns.core.Seconds(0.0))  # Start at simulation time 0
-tcp_sink_app.Stop(ns.core.Seconds(10.0))
-
-# Add UDP agent on n0 and null agent on n3
-udp_source = ns.applications.OnOffHelper("ns3::UdpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 10))
-udp_source.SetAttribute("PacketSize", ns.core.UintegerValue(1024))  # 1 KB packets
-udp_source.SetAttribute("DataRate", ns.core.StringValue("100kbps"))  # Rate: 100 packets/sec
-udp_app = udp_source.Install(nodes.Get(0))
-udp_app.Start(ns.core.Seconds(0.1))  # Start at 0.1 seconds
-udp_app.Stop(ns.core.Seconds(4.5))  # Stop at 4.5 seconds
-
-udp_sink = ns.applications.PacketSinkHelper("ns3::UdpSocketFactory", ns.network.InetSocketAddress(ns.network.Ipv4Address.GetAny(), 10))
-udp_sink_app = udp_sink.Install(nodes.Get(3))
-udp_sink_app.Start(ns.core.Seconds(0.0))
-udp_sink_app.Stop(ns.core.Seconds(10.0))
-
-# Visualization of flows
-ns.visualizer.PyVizHelper.Enable()
-
 ```
 
-### TCP and UDP detail
-
-The provided block of code configures the traffic sources and sinks for both TCP and UDP flows, and then enables network visualization. Let's break it down thoroughly to understand the purpose, functionality, and any variations possible for each line.
-
-
-
-### **Enabling Global Routing**
-
-```python
-ns.internet.Ipv4GlobalRoutingHelper.PopulateRoutingTables()
-
-```
-
--   **Purpose**: Automatically sets up routing tables for the nodes in the network.
-    -   **Global Routing**: Each node calculates its routing table based on the shortest paths to every other node in the network.
--   **How it works**:
-    -   Uses Dijkstra's algorithm to compute the routes.
-    -   Adds entries to the `Ipv4RoutingTable` for each node.
--   **Alternative**: For custom routes, you can use `StaticRoutingHelper` to manually define routes instead of using `Ipv4GlobalRoutingHelper`.
+-   **Purpose**: This line populates the global routing tables for the nodes in the simulation.
+-   **Explanation**:
+    -   `Ipv4GlobalRoutingHelper`: A helper that enables global routing for IPv4 in ns-3.
+    -   `PopulateRoutingTables()`: Automatically computes and installs routes for all IPv4-enabled nodes in the network. This is critical for enabling end-to-end communication between nodes.
 
 ----------
 
-### **Configuring the TCP Flow**
-
-#### **Setting Up the TCP Source on `n1`**
+### **Configuring DropTail Queues**
 
 ```python
-tcp_source = ns.applications.BulkSendHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 9))
-tcp_source.SetAttribute("MaxBytes", ns.core.UintegerValue(0))  # Unlimited data
+traffic_control = ns.traffic_control.TrafficControlHelper()
+traffic_control.SetQueue("ns3::DropTailQueue", "MaxPackets", ns.core.UintegerValue(10))
+traffic_control.Install(devices_n0_n2)
+traffic_control.Install(devices_n1_n2)
+traffic_control.Install(devices_n2_n3)
 
 ```
 
-1.  **`ns.applications.BulkSendHelper`**:
-    -   Used to create a TCP source that sends data in bulk to a specified destination.
-    -   `"ns3::TcpSocketFactory"`: Specifies that the transport protocol is TCP.
-    -   `ns.network.InetSocketAddress`: Defines the destination address and port:
-        -   `interfaces_n2_n3.GetAddress(1)`: IP address of the receiver node (`n3`).
-        -   `9`: Destination port number.
-2.  **Setting Attributes**:
-    -   `"MaxBytes"`: Limits the amount of data sent by the TCP source.
-        -   Here, `0` means unlimited data will be sent.
-
-#### **Installing the TCP Application on `n1`**
-
-```python
-tcp_app = tcp_source.Install(nodes.Get(1))
-tcp_app.Start(ns.core.Seconds(0.5))  # Start at 0.5 seconds
-tcp_app.Stop(ns.core.Seconds(4.0))  # Stop at 4.0 seconds
-
-```
-
-1.  **`Install(nodes.Get(1))`**:
-    -   Installs the configured TCP source application on node `n1`.
-2.  **`Start` and `Stop`**:
-    -   Configures when the application starts and stops.
-    -   Start at `0.5` seconds into the simulation.
-    -   Stop at `4.0` seconds.
+-   **Purpose**: Configures a **DropTail queue** on each link in the network to limit the maximum number of packets stored in the queue to 10.
+-   **Explanation**:
+    -   `TrafficControlHelper()`: A helper class to configure and manage traffic control for network devices.
+    -   `SetQueue("ns3::DropTailQueue", "MaxPackets", ns.core.UintegerValue(10))`: Specifies the use of a DropTail queue with a maximum capacity of 10 packets.
+        -   `"ns3::DropTailQueue"`: Represents a simple FIFO (First-In-First-Out) queueing discipline.
+        -   `"MaxPackets"`: Specifies the attribute to set. Here, it defines the maximum number of packets the queue can hold.
+        -   `ns.core.UintegerValue(10)`: Sets the maximum queue size to 10 packets.
+    -   `Install(devices_n0_n2)`: Applies the configured queue to the link between nodes `n0` and `n2`.
+    -   Similarly, queues are installed on the links `n1-n2` and `n2-n3`.
 
 ----------
 
-#### **Setting Up the TCP Sink on `n3`**
+### **TCP FTP Application**
+
+#### **TCP Sink on n3**
 
 ```python
 tcp_sink = ns.applications.PacketSinkHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(ns.network.Ipv4Address.GetAny(), 9))
 tcp_sink_app = tcp_sink.Install(nodes.Get(3))
-tcp_sink_app.Start(ns.core.Seconds(0.0))  # Start at simulation time 0
+tcp_sink_app.Start(ns.core.Seconds(0.0))
 tcp_sink_app.Stop(ns.core.Seconds(10.0))
 
 ```
 
-1.  **`ns.applications.PacketSinkHelper`**:
-    -   Used to create a sink application that receives packets sent to it.
-    -   `"ns3::TcpSocketFactory"`: Indicates the sink is for TCP traffic.
-    -   `ns.network.InetSocketAddress`:
-        -   `ns.network.Ipv4Address.GetAny()`: Allows the sink to receive packets from any source.
-        -   `9`: The port on which the sink listens for packets.
-2.  **Installing the Application**:
-    -   `tcp_sink.Install(nodes.Get(3))`: Installs the TCP sink on node `n3`.
-    -   Start time (`0.0` seconds): The sink starts receiving packets immediately when the simulation begins.
-    -   Stop time (`10.0` seconds): The sink continues to listen until the end of the simulation.
+-   **Purpose**: Installs a TCP **sink** application on `n3`, which will receive TCP packets from the TCP agent (sender) at `n1`.
+-   **Explanation**:
+    -   `PacketSinkHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(ns.network.Ipv4Address.GetAny(), 9))`: Creates a TCP sink.
+        -   `"ns3::TcpSocketFactory"`: Specifies that this sink will use TCP for communication.
+        -   `ns.network.InetSocketAddress(ns.network.Ipv4Address.GetAny(), 9)`: Configures the sink to listen on port `9` for any incoming TCP packets.
+            -   `Ipv4Address.GetAny()`: Means it will accept packets destined for any IP address assigned to `n3`.
+    -   `tcp_sink.Install(nodes.Get(3))`: Installs the TCP sink application on node `n3`.
+    -   `tcp_sink_app.Start(ns.core.Seconds(0.0))`: The sink starts listening at simulation time `0.0` seconds.
+    -   `tcp_sink_app.Stop(ns.core.Seconds(10.0))`: The sink stops listening at `10.0` seconds.
 
-----------
-
-### **Configuring the UDP Flow**
-
-#### **Setting Up the UDP Source on `n0`**
+#### **FTP on n1**
 
 ```python
-udp_source = ns.applications.OnOffHelper("ns3::UdpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 10))
-udp_source.SetAttribute("PacketSize", ns.core.UintegerValue(1024))  # 1 KB packets
-udp_source.SetAttribute("DataRate", ns.core.StringValue("100kbps"))  # Rate: 100 packets/sec
+ftp = ns.applications.BulkSendHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 9))
+ftp.SetAttribute("MaxBytes", ns.core.UintegerValue(0))  # Unlimited data
+ftp_app = ftp.Install(nodes.Get(1))
+ftp_app.Start(ns.core.Seconds(0.5))
+ftp_app.Stop(ns.core.Seconds(4.0))
 
 ```
 
-1.  **`ns.applications.OnOffHelper`**:
-    -   Generates traffic in bursts, switching between "on" and "off" states.
-    -   `"ns3::UdpSocketFactory"`: Specifies that the transport protocol is UDP.
-    -   Destination Address: `interfaces_n2_n3.GetAddress(1)` refers to the IP of `n3`.
-    -   Destination Port: `10`.
-2.  **Setting Attributes**:
-    -   `"PacketSize"`: Size of each UDP packet in bytes (1024 bytes = 1 KB).
-    -   `"DataRate"`: Specifies the sending rate for packets (100 kbps = 100 packets/sec).
-
-#### **Installing the UDP Application on `n0`**
-
-```python
-udp_app = udp_source.Install(nodes.Get(0))
-udp_app.Start(ns.core.Seconds(0.1))  # Start at 0.1 seconds
-udp_app.Stop(ns.core.Seconds(4.5))  # Stop at 4.5 seconds
-
-```
-
-1.  **`Install(nodes.Get(0))`**:
-    -   Installs the configured UDP source application on node `n0`.
-2.  **`Start` and `Stop`**:
-    -   The application starts at `0.1` seconds.
-    -   Stops at `4.5` seconds.
+-   **Purpose**: Configures an FTP application on `n1` to send TCP traffic to the sink at `n3`.
+-   **Explanation**:
+    -   `BulkSendHelper("ns3::TcpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 9))`: Creates an FTP-like application.
+        -   `"ns3::TcpSocketFactory"`: Specifies that this application will use TCP.
+        -   `InetSocketAddress(interfaces_n2_n3.GetAddress(1), 9)`: Targets the IP address of `n3` on the `n2-n3` link and port `9`.
+    -   `ftp.SetAttribute("MaxBytes", ns.core.UintegerValue(0))`: Configures the application to send unlimited data (`0` means no limit).
+    -   `ftp.Install(nodes.Get(1))`: Installs the FTP application on `n1`.
+    -   `ftp_app.Start(ns.core.Seconds(0.5))`: The application starts at `0.5` seconds.
+    -   `ftp_app.Stop(ns.core.Seconds(4.0))`: The application stops at `4.0` seconds.
 
 ----------
 
-#### **Setting Up the UDP Sink on `n3`**
+### **UDP CBR Application**
+
+#### **UDP Sink on n3**
 
 ```python
 udp_sink = ns.applications.PacketSinkHelper("ns3::UdpSocketFactory", ns.network.InetSocketAddress(ns.network.Ipv4Address.GetAny(), 10))
@@ -614,40 +534,81 @@ udp_sink_app.Stop(ns.core.Seconds(10.0))
 
 ```
 
-1.  **`ns.applications.PacketSinkHelper`**:
-    -   Configures a sink for UDP traffic.
-    -   `"ns3::UdpSocketFactory"`: Indicates the sink is for UDP traffic.
-    -   `ns.network.InetSocketAddress`:
-        -   `ns.network.Ipv4Address.GetAny()`: Allows the sink to receive packets from any source.
-        -   `10`: The port on which the sink listens for UDP packets.
-2.  **Installing the Application**:
-    -   `udp_sink.Install(nodes.Get(3))`: Installs the UDP sink on node `n3`.
-    -   The sink starts immediately (`0.0` seconds) and listens until the simulation ends (`10.0` seconds).
+-   **Purpose**: Installs a UDP sink on `n3` to receive UDP traffic from `n0`.
+-   **Explanation**:
+    -   `"ns3::UdpSocketFactory"`: Specifies that the sink will use UDP for communication.
+    -   `InetSocketAddress(ns.network.Ipv4Address.GetAny(), 10)`: Configures the sink to listen on port `10`.
+    -   `udp_sink.Install(nodes.Get(3))`: Installs the UDP sink application on `n3`.
+    -   `Start` and `Stop`: Similar to the TCP sink.
 
-----------
-
-### **Enabling Visualization**
+#### **CBR on n0**
 
 ```python
-ns.visualizer.PyVizHelper.Enable()
+cbr = ns.applications.OnOffHelper("ns3::UdpSocketFactory", ns.network.InetSocketAddress(interfaces_n2_n3.GetAddress(1), 10))
+cbr.SetAttribute("PacketSize", ns.core.UintegerValue(1024))  # 1 KB packets
+cbr.SetAttribute("DataRate", ns.core.StringValue("100kbps"))  # 100 packets/sec
+cbr_app = cbr.Install(nodes.Get(0))
+cbr_app.Start(ns.core.Seconds(0.1))
+cbr_app.Stop(ns.core.Seconds(4.5))
 
 ```
 
-1.  **`PyVizHelper.Enable()`**:
-    -   Launches the PyViz GUI to visualize the network topology and real-time traffic flows during the simulation.
-    -   You can observe packets traversing the links and verify traffic behaviors.
+-   **Purpose**: Configures a **CBR (Constant Bit Rate)** application on `n0` to send UDP packets to the sink at `n3`.
+-   **Explanation**:
+    -   `OnOffHelper("ns3::UdpSocketFactory", ...)`: Creates a UDP application that alternates between "on" and "off" states.
+        -   `PacketSize`: Configures packet size to `1024` bytes (1 KB).
+        -   `DataRate`: Sets the rate of packet generation to `100 kbps` (100 packets/sec).
+    -   `cbr.Install(nodes.Get(0))`: Installs the application on `n0`.
+    -   `Start` and `Stop`: Configures the start time at `0.1` seconds and stop time at `4.5` seconds.
 
 ----------
 
-### **Summary of Traffic Flows**
+### **FlowMonitor and Traffic Coloring**
 
--   **TCP Flow**:
-    -   Source: `n1` (starts at 0.5 seconds, stops at 4.0 seconds).
-    -   Sink: `n3` (listens on port 9).
--   **UDP Flow**:
-    -   Source: `n0` (starts at 0.1 seconds, stops at 4.5 seconds).
-    -   Sink: `n3` (listens on port 10).
+```python
+flowmon = ns.flow_monitor.FlowMonitorHelper()
+monitor = flowmon.InstallAll()
 
-The setup achieves distinct traffic flows, with different transport protocols and parameters, and uses PyViz for network visualization.
+```
 
+-   **Purpose**: Enables monitoring of network traffic for analysis.
+
+```python
+def ColorTraffic():
+    classifier = flowmon.GetClassifier()
+    for flow_id, flow_stats in monitor.GetFlowStats():
+        flow_desc = classifier.FindFlow(flow_id)
+        if flow_desc.protocol == 6:  # TCP (6 in IP header)
+            print(f"Flow {flow_id} (TCP): Color it BLUE")
+        elif flow_desc.protocol == 17:  # UDP (17 in IP header)
+            print(f"Flow {flow_id} (UDP): Color it RED")
+
+```
+
+-   **Purpose**: Defines rules to color traffic based on the protocol.
+-   **Explanation**:
+    -   `GetClassifier()`: Retrieves the classifier to identify flow metadata (e.g., protocol, source, destination).
+    -   `GetFlowStats()`: Provides statistics for all monitored flows.
+    -   `FindFlow(flow_id)`: Identifies the details of a specific flow based on its ID.
+    -   Protocol `6` (TCP): Colored **blue**.
+    -   Protocol `17` (UDP): Colored **red**.
+
+----------
+
+### **Simulation Execution**
+
+```python
+ns.visualizer.PyVizHelper.Enable()
+ns.core.Simulator.Stop(ns.core.Seconds(10.0))
+ns.core.Simulator.Run()
+ns.core.Simulator.Destroy()
+
+```
+
+-   **PyViz Visualization**: Enables real-time simulation visualization.
+-   **Run and Destroy**: Runs the simulation until `10.0` seconds, then cleans up memory.
+
+----------
+
+If you need any section further clarified, feel free to ask!
 ###### 22L-6824
