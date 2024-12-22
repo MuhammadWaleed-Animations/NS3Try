@@ -608,7 +608,5 @@ ns.core.Simulator.Destroy()
 -   **PyViz Visualization**: Enables real-time simulation visualization.
 -   **Run and Destroy**: Runs the simulation until `10.0` seconds, then cleans up memory.
 
-----------
 
-If you need any section further clarified, feel free to ask!
 ###### 22L-6824
